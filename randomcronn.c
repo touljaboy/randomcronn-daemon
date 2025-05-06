@@ -34,28 +34,6 @@ char *taskfile_path;
 // flaga uzywana do przerwania dzialaniu daemona, potem uzywana w funkcji main w loopie while(running)
 int running = 1;
 
-// obsluga sigint przy wyslaniu sygnalu do daemona (kill -SIGINT [...])
-void handle_sigint(int sig) {
-    // zapisanie do logow systemowych
-    syslog(LOG_INFO, "Received SIGINT. Exiting after current task.");
-    running = 0;
-}
-
-// TODO przeladowanie pliku z zadaniami
-void handle_sigusr1(int sig) {
-    syslog(LOG_INFO, "Received SIGUSR1. Reloading tasks.");
-    load_tasks();
-}
-
-// wypisanie pozostalych zadan do logow systemowych
-void handle_sigusr2(int sig) {
-    syslog(LOG_INFO, "Received SIGUSR2. Remaining tasks:");
-    for (int i = 0; i < task_count; i++) {
-        if (tasks[i].run_at != 0) {
-            syslog(LOG_INFO, "Task: %s", tasks[i].command);
-        }
-    }
-}
 
 // funkcja przetasowania zadan w tabeli, aby zgodnie z trescia wykonac je w losowej kolejnosci
 void shuffle_tasks(Task *tasks) {
@@ -140,6 +118,33 @@ void load_tasks() {
         tasks[i].run_at = tasks[i-1].run_at + 15;
     }
 }
+
+
+// obsluga sigint przy wyslaniu sygnalu do daemona (kill -SIGINT [...])
+void handle_sigint(int sig) {
+    // zapisanie do logow systemowych
+    syslog(LOG_INFO, "Received SIGINT. Exiting after current task.");
+    running = 0;
+}
+
+// TODO przeladowanie pliku z zadaniami
+void handle_sigusr1(int sig) {
+    syslog(LOG_INFO, "Received SIGUSR1. Reloading tasks.");
+    task_count = 0;
+    load_tasks();
+}
+
+// wypisanie pozostalych zadan do logow systemowych
+void handle_sigusr2(int sig) {
+    syslog(LOG_INFO, "Received SIGUSR2. Remaining tasks:");
+    for (int i = 0; i < task_count; i++) {
+        if (tasks[i].run_at != 0) {
+            syslog(LOG_INFO, "Task: %s", tasks[i].command);
+        }
+    }
+}
+
+
 
 // wywolywanie pojedynczego zadania poprzez utworzenie potoku
 void execute_task(Task *task) {
