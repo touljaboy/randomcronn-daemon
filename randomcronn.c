@@ -41,7 +41,7 @@ void handle_sigint(int sig) {
     running = 0;
 }
 
-// przeladowanie pliku z zadaniamis
+// TODO przeladowanie pliku z zadaniami
 void handle_sigusr1(int sig) {
     syslog(LOG_INFO, "Received SIGUSR1. Reloading tasks.");
     task_count = 0;
@@ -59,8 +59,8 @@ void handle_sigusr2(int sig) {
 
 // funkcja przetasowania zadan w tabeli, aby zgodnie z trescia wykonac je w losowej kolejnosci
 void shuffle_tasks(Task *tasks) {
-    for(int i = task_count - 1; i > 0; i--) {
-        int j = rand() % (i-1);
+    for (int i = task_count - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
         // zamieniamy
         Task temp = tasks[i];
         tasks[i] = tasks[j];
@@ -118,23 +118,26 @@ void load_tasks() {
     }
     fclose(f);
 
-        // czas miedzy zadaniami to 10 sekund, wiec task_count * 10 tworzy nam ten odstep
-        // odejmujemy zdefiniowany koniec czasu zadania od jego poczatku oraz potrzebny czas miedzy zadaniami
+    // czas miedzy zadaniami to 10 sekund, wiec task_count * 10 tworzy nam ten odstep
+    // odejmujemy zdefiniowany koniec czasu zadania od jego poczatku oraz potrzebny czas miedzy zadaniami
 
-        // moze dojsc do sytuacji gdzie mamy zbyt wiele zadan na zbyt male okienko czasowe (bo uwzgledniamy przerwy) 
-        // wowczas przerywamy dzialanie daemona
-        int range = difftime(end_time, start_time) - task_count * 10;
-        if (range < 0) {
-            syslog(LOG_ERR, "Not enough time to schedule all of the defined tasks with a 10s window between each one. ");
-        }
+    // moze dojsc do sytuacji gdzie mamy zbyt wiele zadan na zbyt male okienko czasowe (bo uwzgledniamy przerwy) 
+    // wowczas przerywamy dzialanie daemona
+    int range = difftime(end_time, start_time) - task_count * 10;
+    if (range < 0) {
+        syslog(LOG_ERR, "Not enough time to schedule all of the defined tasks with a 10s window between each one. ");
+        exit(1);
+    }
     
     // losujemy kolejnosc zadan
     shuffle_tasks(tasks);
     // nadajemy losowy czas wykonania wczytanym zadaniom
     srand(time(NULL));
-    for (int i = 0; i < task_count; i++) {
-        // losujemy tez czas uruchomienia zadania. w danym przedziale
-        tasks[i].run_at = start_time + (rand() % (range + 1)) + i * 10;
+
+    // pierwszy task wykona sie o podanej godzinie, kolejne w odstepie po 15 sekund
+    tasks[0].run_at = start_time;
+    for (int i = 1; i < task_count; i++) {
+        tasks[i].run_at = tasks[i-1].run_at + 15;
     }
 }
 
@@ -196,7 +199,6 @@ int main(int argc, char *argv[]) {
     if (pid < 0) exit(EXIT_FAILURE);
     if (pid > 0) exit(EXIT_SUCCESS);
 
-
     // demon moze tworzyc pliki z pelnymi uprawnieniami
     umask(0);
     // otwieramy polaczenie z syslogiem, ustawiamy nazwe, pid oraz typ jako daemon
@@ -221,6 +223,7 @@ int main(int argc, char *argv[]) {
     load_tasks();
 
 
+
     while (running) {
         // pobieramy aktualny czas
         time_t now = time(NULL);
@@ -237,11 +240,12 @@ int main(int argc, char *argv[]) {
                 next = tasks[i].run_at;
             }
         }
-        // daemon zasypia na czas do kolejnego zadania (else if wyzej), albo na zdefiniowany czas 15min
+        // czekamy na nastepne uruchomienie
         sleep(next - now);
     }
 
-    syslog(LOG_INFO, "Demon exiting.");
+    // zamykamy syslog po zakonczeniu dzialania daemona
     closelog();
     return 0;
 }
+
