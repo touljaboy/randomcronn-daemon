@@ -44,7 +44,7 @@ void handle_sigint(int sig) {
 // TODO przeladowanie pliku z zadaniami
 void handle_sigusr1(int sig) {
     syslog(LOG_INFO, "Received SIGUSR1. Reloading tasks.");
-    task_count = 0;
+    load_tasks();
 }
 
 // wypisanie pozostalych zadan do logow systemowych
@@ -143,15 +143,9 @@ void load_tasks() {
 
 // wywolywanie pojedynczego zadania poprzez utworzenie potoku
 void execute_task(Task *task) {
-    // tworzymy pipe
-    int fds[2];
-    pipe(fds);
     pid_t pid = fork();
     // jesli pid to zero, znajdujemy sie w procesie potomnym, else proces rodzica
     if (pid == 0) {
-        // zamykamy poczatek pipe'a od odbierania danych potomka, bo bedziemy tylko dane wysylac do fds[1]
-        close(fds[0]);
-        
         // otwieramy plik outfile, write-only, append, tworzymy plik jesli nie istnieje pod dana sciezka, 0644 dostep rwrr
         int out_fd = open(outfile_path, O_WRONLY | O_APPEND | O_CREAT, 0644);
         // w zaleznosci od trybu, przekierowujemy odpowiednie outputy do pliku
@@ -173,8 +167,6 @@ void execute_task(Task *task) {
         // w przypadku gdy np nie znajdziemy komendy, proces potomny opusci proces rodzica
         exit(1);
     } else {
-        // zamykamy koniec pipe'a od odbierania danych rodzica, tylko wysylac do fds[0]
-        close(fds[1]);
         int status;
         // oczekiwanie na zakonczenie wywolanego potomnego task'a
         waitpid(pid, &status, 0);
@@ -209,10 +201,15 @@ int main(int argc, char *argv[]) {
     if (sid < 0) exit(EXIT_FAILURE);
     if ((chdir("/")) < 0) exit(EXIT_FAILURE);
 
-    // zamykamy standardowe deskrypory, blokujac komunikacje daemona z terminalem
-    close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
+    // przekierowujemy standardowe deskrypory na /dev/null, blokujac komunikacje daemona z terminalem
+    int devnull = open("/dev/null", O_RDWR);
+    if (devnull != -1) {
+        dup2(devnull,STDIN_FILENO);
+        dup2(devnull,STDOUT_FILENO);
+        dup2(devnull,STDERR_FILENO);
+        if (devnull > 2) close(devnull);
+    }
+    
 
     // definicje sygnalow z tresci zadania, podpinamy je pod wczesniej zdefiniowane voidy
     signal(SIGINT, handle_sigint);
