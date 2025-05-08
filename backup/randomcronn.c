@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
     // demon moze tworzyc pliki z pelnymi uprawnieniami
     umask(0);
     // otwieramy polaczenie z syslogiem, ustawiamy nazwe, pid oraz typ jako daemon
-    openlog("randomcronn", LOG_PID, LOG_DAEMON);
+    openlog("minicron", LOG_PID, LOG_DAEMON);
 
     // odlaczamy proces od dzialania terminala, zmieniamy working directory na '/'
     pid_t sid = setsid();
